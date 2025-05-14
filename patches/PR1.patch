@@ -1,0 +1,98 @@
+diff --git i/configure.ac w/configure.ac
+index f6d25f3..5fb511b 100644
+--- i/configure.ac
++++ w/configure.ac
+@@ -668,6 +668,11 @@ case "${host}" in
+ 	abi="elf"
+ 	force_tls="0"
+ 	;;
++  *openedition*)
++	abi="goff"
++	force_tls="0"
++	RPATH=""
++	;;
+   *-*-bitrig*)
+ 	abi="elf"
+ 	;;
+diff --git i/include/jemalloc/internal/jemalloc_internal_decls.h w/include/jemalloc/internal/jemalloc_internal_decls.h
+index 983027c..c455926 100644
+--- i/include/jemalloc/internal/jemalloc_internal_decls.h
++++ w/include/jemalloc/internal/jemalloc_internal_decls.h
+@@ -17,9 +17,11 @@
+ #    endif
+ #  endif
+ #else
++#if !defined(__MVS__)
+ #  include <sys/param.h>
++#endif
+ #  include <sys/mman.h>
+-#  if !defined(__pnacl__) && !defined(__native_client__)
++#  if !defined(__pnacl__) && !defined(__native_client__) && !defined(__MVS__)
+ #    include <sys/syscall.h>
+ #    if !defined(SYS_write) && defined(__NR_write)
+ #      define SYS_write __NR_write
+@@ -72,7 +74,9 @@
+ #  define offsetof(type, member)	((size_t)&(((type *)NULL)->member))
+ #endif
+ #include <string.h>
++#define index index_redefine
+ #include <strings.h>
++#undef index
+ #include <ctype.h>
+ #ifdef _MSC_VER
+ #  include <io.h>
+diff --git i/src/background_thread.c w/src/background_thread.c
+index 3bb8d26..1b8af34 100644
+--- i/src/background_thread.c
++++ w/src/background_thread.c
+@@ -80,6 +80,7 @@ background_thread_info_init(tsdn_t *tsdn, background_thread_info_t *info) {
+ 
+ static inline bool
+ set_current_thread_affinity(int cpu) {
++#if !defined(__MVS__)
+ #if defined(JEMALLOC_HAVE_SCHED_SETAFFINITY)
+ 	cpu_set_t cpuset;
+ #else
+@@ -110,6 +111,7 @@ set_current_thread_affinity(int cpu) {
+ #  endif
+ 	return ret != 0;
+ #endif
++#endif
+ }
+ 
+ #define BILLION UINT64_C(1000000000)
+@@ -720,7 +722,7 @@ pthread_create_fptr_init(void) {
+ 	 * wrapper for pthread_create; and 2) application may define its own
+ 	 * wrapper as well (and can call malloc within the wrapper).
+ 	 */
+-#ifdef JEMALLOC_HAVE_DLSYM
++#if defined(JEMALLOC_HAVE_DLSY) && !defined(__MVS__)
+ 	pthread_create_fptr = dlsym(RTLD_NEXT, "pthread_create");
+ #else
+ 	pthread_create_fptr = NULL;
+diff --git i/src/pages.c w/src/pages.c
+index 8c83a7d..64d4515 100644
+--- i/src/pages.c
++++ w/src/pages.c
+@@ -7,6 +7,8 @@
+ #include "jemalloc/internal/assert.h"
+ #include "jemalloc/internal/malloc_io.h"
+ 
++#define MAP_ANON 0
++
+ #ifdef JEMALLOC_SYSCTL_VM_OVERCOMMIT
+ #include <sys/sysctl.h>
+ #ifdef __FreeBSD__
+diff --git i/src/tsd.c w/src/tsd.c
+index e8e4f3a..595d69c 100644
+--- i/src/tsd.c
++++ w/src/tsd.c
+@@ -507,7 +507,7 @@ tsd_init_check_recursion(tsd_init_head_t *head, tsd_init_block_t *block) {
+ 	/* Check whether this thread has already inserted into the list. */
+ 	malloc_mutex_lock(TSDN_NULL, &head->lock);
+ 	ql_foreach(iter, &head->blocks, link) {
+-		if (iter->thread == self) {
++		if (pthread_equal(iter->thread, self)) {
+ 			malloc_mutex_unlock(TSDN_NULL, &head->lock);
+ 			return iter->data;
+ 		}
