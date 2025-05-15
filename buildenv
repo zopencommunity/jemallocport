@@ -1,6 +1,6 @@
 # Update bump details accordingly. Use bump check to confirm.
 # bump: jemalloc-version /JEMALLOC_VERSION="(.*)"/ https://github.com/jemalloc/jemalloc.git|semver:*
-# JEMALLOC_VERSION="V.R.M" # Specify a stable release
+# JEMALLOC_VERSION="5.3.0" # Specify a stable release
 # export ZOPEN_STABLE_TAG="v${JEMALLOC_VERSION}"
 
 ###
