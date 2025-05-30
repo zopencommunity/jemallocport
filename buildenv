@@ -37,7 +37,7 @@ export ZOPEN_SYSTEM_PREREQ=""
 
 export ZOPEN_MAKE_MINIMAL="Y"
 export ZOPEN_CHECK_MINIMAL="Y"
-export ZOPEN_EXTRA_CONFIGURE_OPTS="--disable-debug --enable-static --disable-shared --with-rpath=no"
+export ZOPEN_EXTRA_CONFIGURE_OPTS="--disable-debug --enable-static --disable-shared --with-rpath=no --disable-cxx --with-jemalloc-prefix=je_"
 
 
 ###
@@ -51,6 +51,17 @@ export ZOPEN_BOOTSTRAP="./autogen.sh" ## Bootstrap program to run (defaults to '
 #export ZOPEN_MAKE="skip"      ## Build program to run (defaults to 'make')
 #export ZOPEN_CLEAN=""         ## Clean up program to run (defaults to 'make')
 
+zopen_append_to_env()
+{
+cat <<ZZ
+if [ ! -z "\$ZOPEN_IN_ZOPEN_BUILD" ]; then
+  export ZOPEN_EXTRA_CFLAGS="\${ZOPEN_EXTRA_CFLAGS} -I\$PWD/include"
+  export ZOPEN_EXTRA_CXXFLAGS="\${ZOPEN_EXTRA_CXXFLAGS} -I\$PWD/include"
+  export ZOPEN_EXTRA_LDFLAGS="\${ZOPEN_EXTRA_LDFLAGS} -L\$PWD/lib"
+  export ZOPEN_EXTRA_LIBS="\${ZOPEN_EXTRA_LIBS} -lzoslib -ljemalloc"
+fi
+ZZ
+}
 
 ###
 ### Required user-supplied functions

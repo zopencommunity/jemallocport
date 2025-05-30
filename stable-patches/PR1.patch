@@ -1,0 +1,166 @@
+diff --git a/configure.ac b/configure.ac
+index f6d25f3..5fb511b 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -668,6 +668,11 @@ case "${host}" in
+ 	abi="elf"
+ 	force_tls="0"
+ 	;;
++  *openedition*)
++	abi="goff"
++	force_tls="0"
++	RPATH=""
++	;;
+   *-*-bitrig*)
+ 	abi="elf"
+ 	;;
+diff --git a/include/jemalloc/internal/jemalloc_internal_decls.h b/include/jemalloc/internal/jemalloc_internal_decls.h
+index 983027c..c455926 100644
+--- a/include/jemalloc/internal/jemalloc_internal_decls.h
++++ b/include/jemalloc/internal/jemalloc_internal_decls.h
+@@ -17,9 +17,11 @@
+ #    endif
+ #  endif
+ #else
++#if !defined(__MVS__)
+ #  include <sys/param.h>
++#endif
+ #  include <sys/mman.h>
+-#  if !defined(__pnacl__) && !defined(__native_client__)
++#  if !defined(__pnacl__) && !defined(__native_client__) && !defined(__MVS__)
+ #    include <sys/syscall.h>
+ #    if !defined(SYS_write) && defined(__NR_write)
+ #      define SYS_write __NR_write
+@@ -72,7 +74,9 @@
+ #  define offsetof(type, member)	((size_t)&(((type *)NULL)->member))
+ #endif
+ #include <string.h>
++#define index index_redefine
+ #include <strings.h>
++#undef index
+ #include <ctype.h>
+ #ifdef _MSC_VER
+ #  include <io.h>
+diff --git a/src/background_thread.c b/src/background_thread.c
+index 3bb8d26..1b8af34 100644
+--- a/src/background_thread.c
++++ b/src/background_thread.c
+@@ -80,6 +80,7 @@ background_thread_info_init(tsdn_t *tsdn, background_thread_info_t *info) {
+ 
+ static inline bool
+ set_current_thread_affinity(int cpu) {
++#if !defined(__MVS__)
+ #if defined(JEMALLOC_HAVE_SCHED_SETAFFINITY)
+ 	cpu_set_t cpuset;
+ #else
+@@ -110,6 +111,7 @@ set_current_thread_affinity(int cpu) {
+ #  endif
+ 	return ret != 0;
+ #endif
++#endif
+ }
+ 
+ #define BILLION UINT64_C(1000000000)
+@@ -720,7 +722,7 @@ pthread_create_fptr_init(void) {
+ 	 * wrapper for pthread_create; and 2) application may define its own
+ 	 * wrapper as well (and can call malloc within the wrapper).
+ 	 */
+-#ifdef JEMALLOC_HAVE_DLSYM
++#if defined(JEMALLOC_HAVE_DLSY) && !defined(__MVS__)
+ 	pthread_create_fptr = dlsym(RTLD_NEXT, "pthread_create");
+ #else
+ 	pthread_create_fptr = NULL;
+diff --git a/src/mutex.c b/src/mutex.c
+index 0b3547a..d10934b 100644
+--- a/src/mutex.c
++++ b/src/mutex.c
+@@ -203,8 +203,8 @@ malloc_mutex_postfork_child(tsdn_t *tsdn, malloc_mutex_t *mutex) {
+ #else
+ 	if (malloc_mutex_init(mutex, mutex->witness.name,
+ 	    mutex->witness.rank, mutex->lock_order)) {
+-		malloc_printf("<jemalloc>: Error re-initializing mutex in "
+-		    "child\n");
++		//malloc_printf("<jemalloc>: Error re-initializing mutex in "
++		//    "child\n");
+ 		if (opt_abort) {
+ 			abort();
+ 		}
+diff --git a/src/pages.c b/src/pages.c
+index 8c83a7d..ab92193 100644
+--- a/src/pages.c
++++ b/src/pages.c
+@@ -7,6 +7,8 @@
+ #include "jemalloc/internal/assert.h"
+ #include "jemalloc/internal/malloc_io.h"
+ 
++#define MAP_ANON 0
++
+ #ifdef JEMALLOC_SYSCTL_VM_OVERCOMMIT
+ #include <sys/sysctl.h>
+ #ifdef __FreeBSD__
+@@ -64,9 +66,9 @@ static int madvise_MADV_DONTNEED_zeroes_pages()
+ 	int works = -1;
+ 	size_t size = PAGE;
+ 
+-	void * addr = mmap(NULL, size, PROT_READ|PROT_WRITE,
+-	    MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+-
++	// void * addr = mmap(NULL, size, PROT_READ|PROT_WRITE,
++	//    MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
++	void * addr = anon_mmap(NULL, size);
+ 	if (addr == MAP_FAILED) {
+ 		malloc_write("<jemalloc>: Cannot allocate memory for "
+ 		    "MADV_DONTNEED check\n");
+@@ -86,7 +88,7 @@ static int madvise_MADV_DONTNEED_zeroes_pages()
+ 		works = 1;
+ 	}
+ 
+-	if (munmap(addr, size) != 0) {
++	if (anon_munmap(addr, size) != 0) {
+ 		malloc_write("<jemalloc>: Cannot deallocate memory for "
+ 		    "MADV_DONTNEED check\n");
+ 		if (opt_abort) {
+@@ -146,7 +148,8 @@ os_pages_map(void *addr, size_t size, size_t alignment, bool *commit) {
+ #endif
+ 		int prot = *commit ? PAGES_PROT_COMMIT : PAGES_PROT_DECOMMIT;
+ 
+-		ret = mmap(addr, size, prot, mmap_flags, PAGES_FD_TAG, 0);
++		//ret = mmap(addr, size, prot, mmap_flags, PAGES_FD_TAG, 0);
++		ret = anon_mmap(addr, size);
+ 	}
+ 	assert(ret != NULL);
+ 
+@@ -202,7 +205,7 @@ os_pages_unmap(void *addr, size_t size) {
+ #ifdef _WIN32
+ 	if (VirtualFree(addr, 0, MEM_RELEASE) == 0)
+ #else
+-	if (munmap(addr, size) == -1)
++	if (anon_munmap(addr, size) == -1)
+ #endif
+ 	{
+ 		char buf[BUFERROR_BUF];
+@@ -326,8 +329,9 @@ os_pages_commit(void *addr, size_t size, bool commit) {
+ #else
+ 	{
+ 		int prot = commit ? PAGES_PROT_COMMIT : PAGES_PROT_DECOMMIT;
+-		void *result = mmap(addr, size, prot, mmap_flags | MAP_FIXED,
+-		    PAGES_FD_TAG, 0);
++		//void *result = mmap(addr, size, prot, mmap_flags | MAP_FIXED,
++		//    PAGES_FD_TAG, 0);
++		void *result = anon_mmap(addr, size);
+ 		if (result == MAP_FAILED) {
+ 			return true;
+ 		}
+diff --git a/src/tsd.c b/src/tsd.c
+index e8e4f3a..595d69c 100644
+--- a/src/tsd.c
++++ b/src/tsd.c
+@@ -507,7 +507,7 @@ tsd_init_check_recursion(tsd_init_head_t *head, tsd_init_block_t *block) {
+ 	/* Check whether this thread has already inserted into the list. */
+ 	malloc_mutex_lock(TSDN_NULL, &head->lock);
+ 	ql_foreach(iter, &head->blocks, link) {
+-		if (iter->thread == self) {
++		if (pthread_equal(iter->thread, self)) {
+ 			malloc_mutex_unlock(TSDN_NULL, &head->lock);
+ 			return iter->data;
+ 		}
