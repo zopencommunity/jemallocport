@@ -37,7 +37,7 @@ export ZOPEN_SYSTEM_PREREQ=""
 
 export ZOPEN_MAKE_MINIMAL="Y"
 export ZOPEN_CHECK_MINIMAL="Y"
-export ZOPEN_EXTRA_CONFIGURE_OPTS="--disable-debug --enable-static --disable-shared --with-rpath=no --disable-cxx --with-jemalloc-prefix=je_"
+export ZOPEN_EXTRA_CONFIGURE_OPTS="--disable-debug --enable-static --disable-shared --with-rpath=no --disable-cxx"
 
 
 ###
@@ -55,10 +55,11 @@ zopen_append_to_env()
 {
 cat <<ZZ
 if [ ! -z "\$ZOPEN_IN_ZOPEN_BUILD" ]; then
-  export ZOPEN_EXTRA_CFLAGS="\${ZOPEN_EXTRA_CFLAGS} -I\$PWD/include"
-  export ZOPEN_EXTRA_CXXFLAGS="\${ZOPEN_EXTRA_CXXFLAGS} -I\$PWD/include"
+  export ZOPEN_EXTRA_CFLAGS="\${ZOPEN_EXTRA_CFLAGS} -isystem \$PWD/include"
+  export ZOPEN_EXTRA_CXXFLAGS="\${ZOPEN_EXTRA_CXXFLAGS} -isystem \$PWD/include"
   export ZOPEN_EXTRA_LDFLAGS="\${ZOPEN_EXTRA_LDFLAGS} -L\$PWD/lib"
   export ZOPEN_EXTRA_LIBS="\${ZOPEN_EXTRA_LIBS} -lzoslib -ljemalloc"
+  export ZOPEN_EXTRA_CPPFLAGS="\${ZOPEN_EXTRA_CPPFLAGS} -DZOSLIB_DONT_OVERRIDE_ALLOC"
 fi
 ZZ
 }
@@ -146,9 +147,10 @@ zopen_get_version()
   ## This function runs after the 'install' step of the build is run.
 #}
 
-#zopen_pre_patch(){
-  ## This function runs before the 'patch' step of the build is run.
-#}
+zopen_pre_patch(){
+  export CPPFLAGS="$CPPFLAGS $CFLAGS"
+}
+
 
 #zopen_pre_terminate(){
   ## This function runs before 'zopen build' terminates.
@@ -160,7 +162,7 @@ zopen_get_version()
 ###
 
 #export ZOPEN_EXTRA_CFLAGS="" ## C compiler flags to append to CFLAGS (defaults to '').
-#export ZOPEN_EXTRA_CPPFLAGS="" ## C,C++ pre-processor flags to append to CPPFLAGS (defaults to '')
+export ZOPEN_EXTRA_CPPFLAGS="-DZOSLIB_DONT_OVERRIDE_ALLOC" ## C,C++ pre-processor flags to append to CPPFLAGS (defaults to '')
 #export ZOPEN_EXTRA_CXXFLAGS="" ## C++ compiler flags to append to CXXFLAGS (defaults to '')
 #export ZOPEN_EXTRA_LDFLAGS="" ## C,C++ linker flags to append to LDFLAGS (defaults to '')
 #export ZOPEN_EXTRA_LIBS="" ## C,C++ libraries to append to LIBS (defaults to '')

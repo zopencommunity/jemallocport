@@ -70,6 +70,29 @@ index 3bb8d26..1b8af34 100644
  	pthread_create_fptr = dlsym(RTLD_NEXT, "pthread_create");
  #else
  	pthread_create_fptr = NULL;
+diff --git a/src/jemalloc.c b/src/jemalloc.c
+index 7655de4..b9a845c 100644
+--- a/src/jemalloc.c
++++ b/src/jemalloc.c
+@@ -25,7 +25,7 @@
+ #include "jemalloc/internal/ticker.h"
+ #include "jemalloc/internal/thread_event.h"
+ #include "jemalloc/internal/util.h"
+-
++#include <zos.h>
+ /******************************************************************************/
+ /* Data. */
+ 
+@@ -4319,6 +4319,9 @@ label_done:
+ JEMALLOC_ATTR(constructor)
+ static void
+ jemalloc_constructor(void) {
++	zoslib_config_t config;
++	init_zoslib_config(&config);
++	init_zoslib(config);
+ 	malloc_init();
+ }
+ #endif
 diff --git a/src/mutex.c b/src/mutex.c
 index 0b3547a..d10934b 100644
 --- a/src/mutex.c
